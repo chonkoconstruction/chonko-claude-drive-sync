@@ -4,11 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       file_id:
-        description: Google Drive file ID
         required: true
         type: string
       pending_file:
-        description: Repo path to temp content file
         required: true
         type: string
       doc_name:
@@ -24,20 +22,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Debug environment
-        run: |
-          echo "=== Python version ==="
-          python3 --version
-          echo "=== Pending file check ==="
-          ls -la "${{ inputs.pending_file }}" && echo FILE_EXISTS || echo FILE_MISSING
-          echo "=== First line of pending file ==="
-          head -1 "${{ inputs.pending_file }}" || echo COULD_NOT_READ
-          echo "=== APPS_SCRIPT_URL set: $([ -n '$APPS_SCRIPT_URL' ] && echo YES || echo NO) ==="
-          echo "=== APPS_SCRIPT_SECRET set: $([ -n '$APPS_SCRIPT_SECRET' ] && echo YES || echo NO) ==="
-        env:
-          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
-          APPS_SCRIPT_SECRET: ${{ secrets.APPS_SCRIPT_SECRET }}
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -46,22 +30,45 @@ jobs:
       - name: Install Python dependencies
         run: pip install requests --quiet
 
-      - name: Read content and update Drive file
+      - name: Diagnose environment
         env:
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           APPS_SCRIPT_SECRET: ${{ secrets.APPS_SCRIPT_SECRET }}
           FILE_ID: ${{ inputs.file_id }}
           PENDING_FILE: ${{ inputs.pending_file }}
-          DOC_NAME: ${{ inputs.doc_name }}
-        run: python3 scripts/update_drive.py
-
-      - name: Delete temp content file
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api             --method DELETE             -H "Accept: application/vnd.github+json"             /repos/${{ github.repository }}/contents/${{ inputs.pending_file }}             -f message="cleanup: remove pending update for ${{ inputs.doc_name }}"             -f sha=$(gh api /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} --jq ".sha")
-
-      - name: Confirm success
-        if: success()
-        run: echo "OK ${{ inputs.doc_name }} updated."
+          echo "=== File check ==="
+          ls -la "$PENDING_FILE" && echo "FILE_OK" || echo "FILE_MISSING"
+          echo "=== Python check ==="
+          python3 --version
+          python3 -c "
+          import os, sys
+          pf = os.environ.get('PENDING_FILE', 'NOT_SET')
+          url = os.environ.get('APPS_SCRIPT_URL', 'NOT_SET')
+          sec = os.environ.get('APPS_SCRIPT_SECRET', 'NOT_SET')
+          fid = os.environ.get('FILE_ID', 'NOT_SET')
+          print('PENDING_FILE:', pf)
+          print('FILE_ID:', fid)
+          print('APPS_SCRIPT_URL length:', len(url))
+          print('APPS_SCRIPT_SECRET length:', len(sec))
+          if os.path.exists(pf):
+              with open(pf) as f:
+                  line = f.readline().strip()
+              print('First line:', line)
+          else:
+              print('FILE DOES NOT EXIST at:', pf)
+          "
+          echo "=== HTTP test to Apps Script ==="
+          python3 -c "
+          import os, requests
+          url = os.environ.get('APPS_SCRIPT_URL','')
+          if not url:
+              print('No URL set')
+          else:
+              try:
+                  r = requests.post(url, json={'secret': os.environ.get('APPS_SCRIPT_SECRET',''), 'action': 'test'}, timeout=15)
+                  print('HTTP status:', r.status_code)
+                  print('Response:', r.text[:300])
+              except Exception as e:
+                  print('Exception:', type(e).__name__, str(e)[:200])
+          "
