@@ -41,15 +41,21 @@ jobs:
       - name: Delete temp content file
         if: success()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api \
-            --method DELETE \
-            -H "Accept: application/vnd.github+json" \
-            /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} \
-            -f message="cleanup: remove pending update for ${{ inputs.doc_name }}" \
-            -f sha=$(gh api /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} --jq '.sha')
+          python3 - << 'PYEOF2'
+          import os, requests
+          token = os.environ["GITHUB_TOKEN"]
+          path  = "${{ inputs.pending_file }}"
+          repo  = "${{ github.repository }}"
+          headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
+          sha = requests.get(f"https://api.github.com/repos/{repo}/contents/{path}", headers=headers).json().get("sha","")
+          r = requests.delete(f"https://api.github.com/repos/{repo}/contents/{path}",
+              headers=headers,
+              json={"message": f"cleanup: ${{ inputs.doc_name }}", "sha": sha})
+          print("Cleanup:", r.status_code, "✅" if r.status_code == 200 else "⚠️")
+          PYEOF2
 
       - name: Confirm success
         if: success()
-        run: echo "✅ ${{ inputs.doc_name }} updated."
+        run: echo "✅ ${{ inputs.doc_name }} updated successfully."
