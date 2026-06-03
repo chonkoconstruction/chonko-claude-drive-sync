@@ -1,33 +1,20 @@
 #!/usr/bin/env python3
 """
 scripts/update_drive.py — Chonko Drive Sync Worker
-Reads content from a repo temp file, POSTs to Apps Script webhook,
-and handles Google's POST-preserving redirect chain.
+Updates a Google Drive file directly via the Drive API using a service account.
 """
-import os, sys, json, requests
-
-TIMEOUT = 60
+import os, sys, json
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaInMemoryUpload
 
 def log(msg=""): print(msg, flush=True)
 
-def post_with_redirects(url, payload, timeout=TIMEOUT):
-    """POST to Apps Script, preserving POST method through Google's redirects."""
-    session = requests.Session()
-    resp = session.post(url, json=payload, allow_redirects=False, timeout=timeout)
-    hops = 0
-    while resp.status_code in (301, 302, 303, 307, 308) and hops < 6:
-        location = resp.headers.get("Location", "")
-        log(f"  Redirect {resp.status_code} → {location[:80]}")
-        resp = session.post(location, json=payload, allow_redirects=False, timeout=timeout)
-        hops += 1
-    return resp
-
 def main():
     try:
-        url    = os.environ["APPS_SCRIPT_URL"]
-        secret = os.environ["APPS_SCRIPT_SECRET"]
-        fid    = os.environ["FILE_ID"]
-        pf     = os.environ["PENDING_FILE"]
+        sa_json  = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
+        file_id  = os.environ["FILE_ID"]
+        pf       = os.environ["PENDING_FILE"]
     except KeyError as e:
         sys.exit(f"Missing env var: {e}")
 
@@ -35,30 +22,31 @@ def main():
 
     log("=== Chonko Drive Sync ===")
     log(f"Target : {doc_name}")
-    log(f"File ID: {fid}")
+    log(f"File ID: {file_id}")
 
+    # Read content
     with open(pf, "r", encoding="utf-8") as f:
         content = f.read()
     log(f"Content: {len(content):,} chars — first line: {content.splitlines()[0]}")
 
-    log("\nCalling Apps Script…")
-    payload = {"secret": secret, "action": "update", "fileId": fid, "content": content}
-    resp = post_with_redirects(url, payload)
+    # Auth
+    sa_info = json.loads(sa_json)
+    creds = service_account.Credentials.from_service_account_info(
+        sa_info,
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
 
-    log(f"Final status : {resp.status_code}")
-    log(f"Response     : {resp.text[:400]}")
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
 
-    if not resp.ok:
-        sys.exit(f"ERROR: HTTP {resp.status_code}")
+    # Update file content
+    log("\nUpdating Drive file…")
+    media = MediaInMemoryUpload(content.encode("utf-8"), mimetype="text/plain")
+    result = service.files().update(fileId=file_id, media_body=media).execute()
 
-    try:
-        result = resp.json()
-        if "error" in result:
-            sys.exit(f"ERROR from Apps Script: {result['error']}")
-    except Exception:
-        pass  # non-JSON 200 is fine
-
-    log("\n✅ Done.")
+    log(f"✅ Updated: {result.get('name')} ({result.get('id')})")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        sys.exit(f"ERROR: {e}")
