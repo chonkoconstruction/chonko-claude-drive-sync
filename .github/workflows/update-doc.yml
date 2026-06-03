@@ -4,24 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       file_id:
-        description: 'Google Drive file ID to update'
         required: true
         type: string
       pending_file:
-        description: 'Repo-relative path to temp content file'
         required: true
         type: string
       doc_name:
-        description: 'Human-readable doc name for logging'
         required: false
-        default: 'document'
+        default: document
         type: string
 
 jobs:
   update-document:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,7 +37,39 @@ jobs:
           FILE_ID: ${{ inputs.file_id }}
           PENDING_FILE: ${{ inputs.pending_file }}
           DOC_NAME: ${{ inputs.doc_name }}
-        run: python3 scripts/update_drive.py
+        run: |
+          python3 - << 'PYEOF2'
+          import os, sys, requests
+
+          url    = os.environ["APPS_SCRIPT_URL"]
+          secret = os.environ["APPS_SCRIPT_SECRET"]
+          fid    = os.environ["FILE_ID"]
+          pf     = os.environ["PENDING_FILE"]
+
+          print(f"URL length   : {len(url)}")
+          print(f"Secret length: {len(secret)}")
+          print(f"File ID      : {fid}")
+          print(f"Pending file : {pf}")
+
+          with open(pf, "r") as f:
+              content = f.read()
+          print(f"Content size : {len(content):,} chars")
+          print(f"First line   : {content.splitlines()[0]}")
+
+          print("\n--- Calling Apps Script ---")
+          try:
+              r = requests.post(url, json={"secret": secret, "action": "update", "fileId": fid, "content": content}, timeout=30)
+              print(f"HTTP status  : {r.status_code}")
+              print(f"Response     : {r.text[:500]}")
+              if not r.ok:
+                  print("FAILED: non-OK response")
+                  sys.exit(1)
+          except Exception as e:
+              print(f"EXCEPTION    : {type(e).__name__}: {e}")
+              sys.exit(1)
+
+          print("SUCCESS")
+          PYEOF2
 
       - name: Delete temp content file
         if: success()
@@ -54,9 +82,3 @@ jobs:
             /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} \
             -f message="cleanup: remove pending update for ${{ inputs.doc_name }}" \
             -f sha=$(gh api /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} --jq '.sha')
-
-      - name: Confirm success
-        if: success()
-        run: |
-          echo "✅ '${{ inputs.doc_name }}' updated successfully."
-          echo "   Drive file ID : ${{ inputs.file_id }}"
