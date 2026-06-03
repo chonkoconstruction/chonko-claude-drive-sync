@@ -28,12 +28,11 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install requests --quiet
+        run: pip install google-auth google-auth-httplib2 google-api-python-client --quiet
 
-      - name: Read content and update Drive file
+      - name: Update Drive file
         env:
-          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
-          APPS_SCRIPT_SECRET: ${{ secrets.APPS_SCRIPT_SECRET }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           FILE_ID: ${{ inputs.file_id }}
           PENDING_FILE: ${{ inputs.pending_file }}
           DOC_NAME: ${{ inputs.doc_name }}
@@ -53,4 +52,4 @@ jobs:
 
       - name: Confirm success
         if: success()
-        run: echo "OK ${{ inputs.doc_name }} updated."
+        run: echo "✅ ${{ inputs.doc_name }} updated."
