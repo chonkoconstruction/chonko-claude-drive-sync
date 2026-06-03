@@ -28,7 +28,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install google-auth google-auth-httplib2 google-api-python-client markdown --quiet
+        run: pip install google-auth google-auth-httplib2 google-api-python-client --quiet
 
       - name: Update Drive file
         env:
@@ -51,11 +51,10 @@ jobs:
           headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
           sha = requests.get(f"https://api.github.com/repos/{repo}/contents/{path}", headers=headers).json().get("sha","")
           r = requests.delete(f"https://api.github.com/repos/{repo}/contents/{path}",
-              headers=headers,
-              json={"message": f"cleanup: ${{ inputs.doc_name }}", "sha": sha})
+              headers=headers, json={"message": f"cleanup: ${{ inputs.doc_name }}", "sha": sha})
           print("Cleanup:", r.status_code, "✅" if r.status_code == 200 else "⚠️")
           PYEOF2
 
       - name: Confirm success
         if: success()
-        run: echo "✅ ${{ inputs.doc_name }} updated successfully."
+        run: echo "✅ ${{ inputs.doc_name }} updated."
