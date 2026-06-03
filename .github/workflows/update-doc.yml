@@ -1,38 +1,47 @@
 name: Update Drive Document
 
-# Triggered by Claude via the GitHub API (workflow_dispatch).
-# Content is written as a temp file in _pending/ by Claude before dispatch.
-
 on:
   workflow_dispatch:
     inputs:
       file_id:
-        description: 'Google Drive file ID to update'
+        description: Google Drive file ID
         required: true
         type: string
       pending_file:
-        description: 'Repo-relative path to the temp content file (e.g. _pending/doc2.md)'
+        description: Repo path to temp content file
         required: true
         type: string
       doc_name:
-        description: 'Human-readable doc name for log output'
         required: false
-        default: 'document'
+        default: document
         type: string
 
 jobs:
   update-document:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Debug environment
+        run: |
+          echo "=== Python version ==="
+          python3 --version
+          echo "=== Pending file check ==="
+          ls -la "${{ inputs.pending_file }}" && echo FILE_EXISTS || echo FILE_MISSING
+          echo "=== First line of pending file ==="
+          head -1 "${{ inputs.pending_file }}" || echo COULD_NOT_READ
+          echo "=== APPS_SCRIPT_URL set: $([ -n '$APPS_SCRIPT_URL' ] && echo YES || echo NO) ==="
+          echo "=== APPS_SCRIPT_SECRET set: $([ -n '$APPS_SCRIPT_SECRET' ] && echo YES || echo NO) ==="
+        env:
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+          APPS_SCRIPT_SECRET: ${{ secrets.APPS_SCRIPT_SECRET }}
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install Python dependencies
         run: pip install requests --quiet
@@ -44,21 +53,15 @@ jobs:
           FILE_ID: ${{ inputs.file_id }}
           PENDING_FILE: ${{ inputs.pending_file }}
           DOC_NAME: ${{ inputs.doc_name }}
-        run: python scripts/update_drive.py
+        run: python3 scripts/update_drive.py
 
       - name: Delete temp content file
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api \
-            --method DELETE \
-            -H "Accept: application/vnd.github+json" \
-            /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} \
-            -f message="cleanup: remove pending update for ${{ inputs.doc_name }}" \
-            -f sha=$(gh api /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} --jq '.sha')
+          gh api             --method DELETE             -H "Accept: application/vnd.github+json"             /repos/${{ github.repository }}/contents/${{ inputs.pending_file }}             -f message="cleanup: remove pending update for ${{ inputs.doc_name }}"             -f sha=$(gh api /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} --jq ".sha")
 
       - name: Confirm success
         if: success()
-        run: |
-          echo "✅ '${{ inputs.doc_name }}' updated successfully."
-          echo "   Drive file ID : ${{ inputs.file_id }}"
+        run: echo "OK ${{ inputs.doc_name }} updated."
