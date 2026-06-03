@@ -1,7 +1,7 @@
 name: Update Drive Document
 
 # Triggered by Claude via the GitHub API (workflow_dispatch).
-# Never run manually — inputs are always supplied by Claude's bash_tool call.
+# Content is written as a temp file in _pending/ by Claude before dispatch.
 
 on:
   workflow_dispatch:
@@ -10,8 +10,8 @@ on:
         description: 'Google Drive file ID to update'
         required: true
         type: string
-      gist_id:
-        description: 'Secret Gist ID containing the new document content'
+      pending_file:
+        description: 'Repo-relative path to the temp content file (e.g. _pending/doc2.md)'
         required: true
         type: string
       doc_name:
@@ -37,19 +37,28 @@ jobs:
       - name: Install Python dependencies
         run: pip install requests --quiet
 
-      - name: Fetch Gist content and update Drive file
+      - name: Read content and update Drive file
         env:
-          CLAUDE_PAT: ${{ secrets.CLAUDE_PAT }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           APPS_SCRIPT_SECRET: ${{ secrets.APPS_SCRIPT_SECRET }}
           FILE_ID: ${{ inputs.file_id }}
-          GIST_ID: ${{ inputs.gist_id }}
+          PENDING_FILE: ${{ inputs.pending_file }}
           DOC_NAME: ${{ inputs.doc_name }}
         run: python scripts/update_drive.py
+
+      - name: Delete temp content file
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            --method DELETE \
+            -H "Accept: application/vnd.github+json" \
+            /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} \
+            -f message="cleanup: remove pending update for ${{ inputs.doc_name }}" \
+            -f sha=$(gh api /repos/${{ github.repository }}/contents/${{ inputs.pending_file }} --jq '.sha')
 
       - name: Confirm success
         if: success()
         run: |
           echo "✅ '${{ inputs.doc_name }}' updated successfully."
           echo "   Drive file ID : ${{ inputs.file_id }}"
-          echo "   Gist (deleted): ${{ inputs.gist_id }}"
