@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chonko Drive Doc Updater</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --bg: #0e1014;
+    --surface: #181b21;
+    --surface2: #20242c;
+    --border: #2c313b;
+    --text: #e6e8ec;
+    --muted: #8b94a3;
+    --dim: #565e6b;
+    --accent: #e8743b;
+    --accent-h: #f0824a;
+    --ok: #3fb950;
+    --err: #f0504a;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font); line-height: 1.5;
+    min-height: 100vh; padding: 32px 20px;
+  }
+  .wrap { max-width: 540px; margin: 0 auto; }
+  .brand { font-size: 11px; letter-spacing: 0.14em; color: var(--accent); font-weight: 600; margin-bottom: 6px; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 28px; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  label { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+  input, textarea {
+    width: 100%; padding: 11px 13px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    font-size: 14px; font-family: var(--font); outline: none; transition: border-color .15s;
+  }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  textarea { min-height: 130px; resize: vertical; font-family: var(--mono); font-size: 13px; line-height: 1.6; }
+  .field { margin-bottom: 18px; }
+  .mono { font-family: var(--mono); }
+  p.desc { font-size: 14px; color: var(--muted); margin-bottom: 18px; }
+  .hint { font-size: 12px; color: var(--dim); margin-bottom: 22px; line-height: 1.6; }
+  .hint code { color: var(--muted); font-family: var(--mono); }
+  button.primary {
+    width: 100%; padding: 13px; background: var(--accent); color: #fff;
+    border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: background .15s; font-family: var(--font);
+  }
+  button.primary:hover { background: var(--accent-h); }
+  button.primary:disabled { background: var(--surface2); color: var(--dim); cursor: default; }
+  button.link {
+    background: none; border: none; color: var(--muted); font-size: 12px;
+    cursor: pointer; padding: 8px; font-family: var(--font);
+  }
+  button.link:hover { color: var(--text); }
+  .status-bar {
+    display: flex; align-items: center; gap: 8px; padding: 9px 13px;
+    background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3);
+    border-radius: 8px; margin-bottom: 24px; font-size: 13px; color: var(--ok);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .msg { padding: 10px 13px; border-radius: 8px; font-size: 13px; margin: 14px 0; }
+  .msg.err { background: rgba(240,80,74,0.1); border: 1px solid rgba(240,80,74,0.3); color: var(--err); }
+  .file-opt {
+    display: block; width: 100%; text-align: left; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    margin-bottom: 8px; cursor: pointer; transition: border-color .15s; color: var(--text);
+    font-family: var(--font);
+  }
+  .file-opt:hover { border-color: var(--accent); }
+  .file-opt .n { font-size: 14px; font-weight: 500; }
+  .file-opt .t { font-size: 12px; color: var(--dim); margin-top: 3px; }
+  .working { text-align: center; padding: 56px 0; }
+  .spinner {
+    width: 28px; height: 28px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    margin: 0 auto 16px; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .working .t { font-size: 14px; color: var(--muted); }
+  .done { text-align: center; padding: 48px 0; }
+  .check { font-size: 40px; color: var(--ok); margin-bottom: 12px; }
+  .done h2 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+  .done .name { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+  .done a { color: var(--accent); font-size: 13px; text-decoration: none; }
+  .done a:hover { text-decoration: underline; }
+  .preview-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin: 14px 0; max-height: 220px; overflow-y: auto;
+    font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--muted);
+    white-space: pre-wrap; word-break: break-word;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">CHONKO CONSTRUCTION</div>
+  <h1>Drive doc updater</h1>
+
+  <!-- CONNECT -->
+  <div id="s-connect" class="screen active">
+    <p class="desc">Connect to Google Drive to update your project docs in place.</p>
+    <div class="field">
+      <label>OAuth client ID</label>
+      <input type="text" id="client-id" class="mono" placeholder="xxxxx.apps.googleusercontent.com">
+    </div>
+    <div id="connect-err"></div>
+    <button class="primary" id="connect-btn">Connect Google Drive</button>
+  </div>
+
+  <!-- READY -->
+  <div id="s-ready" class="screen">
+    <div class="status-bar"><span class="dot"></span> Connected to Google Drive</div>
+    <div class="field">
+      <label>Which doc?</label>
+      <input type="text" id="doc-query" placeholder="DOC-3, keyword-master, site-audit…">
+    </div>
+    <div class="field">
+      <label>What changes?</label>
+      <textarea id="instruction" placeholder="Describe the change, or paste full replacement content…"></textarea>
+    </div>
+    <div id="ready-err"></div>
+    <button class="primary" id="update-btn">Update doc</button>
+  </div>
+
+  <!-- DISAMBIGUATE -->
+  <div id="s-pick" class="screen">
+    <p class="desc">Multiple matches — pick one:</p>
+    <div id="file-list"></div>
+    <button class="link" id="pick-cancel">← Cancel</button>
+  </div>
+
+  <!-- CONFIRM -->
+  <div id="s-confirm" class="screen">
+    <p class="desc">Review the change before it's written to <strong id="confirm-name"></strong>:</p>
+    <div class="preview-box" id="confirm-preview"></div>
+    <div id="confirm-err"></div>
+    <button class="primary" id="confirm-btn">Write to Drive</button>
+    <button class="link" id="confirm-cancel" style="display:block;margin:8px auto 0">← Back</button>
+  </div>
+
+  <!-- WORKING -->
+  <div id="s-working" class="screen">
+    <div class="working">
+      <div class="spinner"></div>
+      <div class="t" id="working-msg">Working…</div>
+    </div>
+  </div>
+
+  <!-- DONE -->
+  <div id="s-done" class="screen">
+    <div class="done">
+      <div class="check">✓</div>
+      <h2>Updated in place</h2>
+      <div class="name" id="done-name"></div>
+      <a id="done-link" target="_blank" rel="noreferrer">Open in Drive ↗</a>
+      <div style="margin-top:24px">
+        <button class="link" id="another-btn">Update another doc</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CLIENT_ID_DEFAULT = "880336184511-0brn4irfhumrpmf16r2599df2j9t059p.apps.googleusercontent.com";
+let accessToken = null;
+let pendingFile = null;
+let pendingContent = null;
+
+const $ = id => document.getElementById(id);
+function show(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  $(id).classList.add("active");
+}
+function msg(containerId, text, kind) {
+  $(containerId).innerHTML = text ? `<div class="msg ${kind||'err'}">${text}</div>` : "";
+}
+function setWorking(t) { $("working-msg").textContent = t; show("s-working"); }
+
+$("client-id").value = CLIENT_ID_DEFAULT;
+
+$("connect-btn").onclick = () => {
+  const cid = $("client-id").value.trim();
+  if (!cid) { msg("connect-err", "Enter your Client ID."); return; }
+  if (!window.google || !google.accounts) {
+    msg("connect-err", "Google library still loading — wait a moment and retry.");
+    return;
+  }
+  msg("connect-err", "");
+  try {
+    const tc = google.accounts.oauth2.initTokenClient({
+      client_id: cid,
+      scope: "https://www.googleapis.com/auth/drive",
+      callback: (resp) => {
+        if (resp.error) { msg("connect-err", "Auth failed: " + (resp.error_description || resp.error)); return; }
+        accessToken = resp.access_token;
+        show("s-ready");
+      }
+    });
+    tc.requestAccessToken();
+  } catch (e) {
+    msg("connect-err", "Error: " + e.message);
+  }
+};
+
+$("update-btn").onclick = async () => {
+  const q = $("doc-query").value.trim();
+  const instr = $("instruction").value.trim();
+  if (!q || !instr) { msg("ready-err", "Fill in both fields."); return; }
+  msg("ready-err", "");
+  setWorking(`Searching Drive for "${q}"…`);
+  try {
+    const files = await driveSearch(q);
+    if (!files.length) { msg("ready-err", `No files found matching "${q}".`); show("s-ready"); return; }
+    if (files.length === 1) { await prepareUpdate(files[0], instr); }
+    else { renderPicker(files, instr); }
+  } catch (e) { msg("ready-err", e.message); show("s-ready"); }
+};
+
+function renderPicker(files, instr) {
+  const list = $("file-list");
+  list.innerHTML = "";
+  files.forEach(f => {
+    const b = document.createElement("button");
+    b.className = "file-opt";
+    b.innerHTML = `<div class="n">${f.name}</div><div class="t">${f.mimeType === "application/vnd.google-apps.document" ? "Google Doc" : "File"}</div>`;
+    b.onclick = () => prepareUpdate(f, instr);
+    list.appendChild(b);
+  });
+  show("s-pick");
+}
+$("pick-cancel").onclick = () => show("s-ready");
+
+async function prepareUpdate(file, instr) {
+  try {
+    setWorking(`Reading "${file.name}"…`);
+    const current = await driveRead(file);
+    setWorking("Generating the update…");
+    const updated = await generateUpdate(current, instr);
+    if (!updated.trim()) throw new Error("Generation returned empty content.");
+    pendingFile = file;
+    pendingContent = updated;
+    $("confirm-name").textContent = file.name;
+    $("confirm-preview").textContent = updated.slice(0, 1200) + (updated.length > 1200 ? "\n\n…(" + (updated.length - 1200) + " more chars)" : "");
+    msg("confirm-err", "");
+    show("s-confirm");
+  } catch (e) { msg("ready-err", e.message); show("s-ready"); }
+}
+
+$("confirm-cancel").onclick = () => show("s-ready");
+$("confirm-btn").onclick = async () => {
+  try {
+    setWorking("Writing to Drive…");
+    await drivePatch(pendingFile.id, pendingContent);
+    $("done-name").textContent = pendingFile.name;
+    $("done-link").href = pendingFile.webViewLink || ("https://drive.google.com/file/d/" + pendingFile.id);
+    show("s-done");
+  } catch (e) { msg("confirm-err", e.message); show("s-confirm"); }
+};
+
+$("another-btn").onclick = () => {
+  $("doc-query").value = "";
+  $("instruction").value = "";
+  show("s-ready");
+};
+
+async function driveSearch(name) {
+  const q = encodeURIComponent(`name contains '${name.replace(/'/g, "\\'")}' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,webViewLink)&pageSize=10`, {
+    headers: { Authorization: "Bearer " + accessToken }
+  });
+  if (!r.ok) throw new Error("Drive search failed: " + r.status);
+  return (await r.json()).files || [];
+}
+
+async function driveRead(file) {
+  const url = file.mimeType === "application/vnd.google-apps.document"
+    ? `https://www.googleapis.com/drive/v3/files/${file.id}/export?mimeType=text/plain`
+    : `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`;
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + accessToken } });
+  if (!r.ok) throw new Error("Could not read file: " + r.status);
+  return r.text();
+}
+
+async function drivePatch(fileId, content) {
+  const r = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+    method: "PATCH",
+    headers: { Authorization: "Bearer " + accessToken, "Content-Type": "text/plain" },
+    body: content
+  });
+  if (!r.ok) {
+    let detail = r.status;
+    try { detail = (await r.json()).error?.message || r.status; } catch (e) {}
+    throw new Error("Write failed: " + detail);
+  }
+}
+
+async function generateUpdate(current, instr) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8000,
+      system: "You are a document editor. You receive the full current content of a document and an instruction.\n- If the instruction provides full replacement content or asks for a full rewrite: produce the new full document.\n- If the instruction is a targeted change (add/insert/update/remove a section): apply only that change, preserving everything else exactly.\nReturn ONLY the final full document content — no preamble, no explanation, no markdown code fences.",
+      messages: [{
+        role: "user",
+        content: "CURRENT DOCUMENT:\n\n" + current + "\n\n---\n\nINSTRUCTION: " + instr + "\n\nReturn the complete updated document."
+      }]
+    })
+  });
+  if (!r.ok) {
+    let detail = r.status;
+    try { detail = (await r.json()).error?.message || r.status; } catch (e) {}
+    throw new Error("Generation failed: " + detail);
+  }
+  const d = await r.json();
+  return (d.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
+}
+</script>
+</body>
+</html>
