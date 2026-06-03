@@ -28,7 +28,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install google-auth google-auth-httplib2 google-api-python-client --quiet
+        run: pip install google-auth google-auth-httplib2 google-api-python-client markdown --quiet
 
       - name: Update Drive file
         env:
