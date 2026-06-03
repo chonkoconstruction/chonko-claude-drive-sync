@@ -1,0 +1,55 @@
+name: Update Drive Document
+
+# Triggered by Claude via the GitHub API (workflow_dispatch).
+# Never run manually — inputs are always supplied by Claude's bash_tool call.
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_id:
+        description: 'Google Drive file ID to update'
+        required: true
+        type: string
+      gist_id:
+        description: 'Secret Gist ID containing the new document content'
+        required: true
+        type: string
+      doc_name:
+        description: 'Human-readable doc name for log output'
+        required: false
+        default: 'document'
+        type: string
+
+jobs:
+  update-document:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install requests --quiet
+
+      - name: Fetch Gist content and update Drive file
+        env:
+          CLAUDE_PAT: ${{ secrets.CLAUDE_PAT }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+          APPS_SCRIPT_SECRET: ${{ secrets.APPS_SCRIPT_SECRET }}
+          FILE_ID: ${{ inputs.file_id }}
+          GIST_ID: ${{ inputs.gist_id }}
+          DOC_NAME: ${{ inputs.doc_name }}
+        run: python scripts/update_drive.py
+
+      - name: Confirm success
+        if: success()
+        run: |
+          echo "✅ '${{ inputs.doc_name }}' updated successfully."
+          echo "   Drive file ID : ${{ inputs.file_id }}"
+          echo "   Gist (deleted): ${{ inputs.gist_id }}"
